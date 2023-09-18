@@ -150,6 +150,14 @@ def refresh_access_token(client_id, client_secret, refresh_token):
     expires_in = response['expires_in']
     return token, expires_in        
 
+def create_auth_url():
+    url = "https://accounts.spotify.com/authorize"
+    url += "?client_id=" + SPOTIFY_CLIENT_ID
+    url += "&response_type=code"
+    url += "&redirect_uri=" + SPOTIFY_API_CALLBACK_URL
+    url += "&scope=user-read-email"
+    return url
+
 import requests
 import urllib3
 
@@ -254,6 +262,11 @@ def get_top_tracks_by_author_id(author_id):
 
     return tracks
 
+def get_top_tracks_by_author_name(author_name):
+    author_id = get_author_id_by_name(author_name)
+    tracks = get_top_tracks_by_author_id(author_id)
+    return tracks
+
 def get_tracks_by_author_id(author_id, count = 50):
     url = "https://api.spotify.com/v1/search"
     auth_header = {"Authorization": "Bearer " + get_access_token()}
@@ -273,6 +286,39 @@ def get_tracks_by_author_id(author_id, count = 50):
     print(tracks)
     return tracks
 
+def get_tracks_by_author_name(author_name, count = 50):
+    url = "https://api.spotify.com/v1/search"
+    auth_header = {"Authorization": "Bearer " + get_access_token()}
+    author_id = get_author_id_by_name(author_name)
+    x = 0
+    tracks = []
+    while x < count:
+        limit = 50 if count - x > 50 else count - x
+        params = {
+            "q": "artist:" + author_name,
+            "type": "track",
+            "limit": limit,
+            "offset": x
+        }
+        response = requests.get(url, headers=auth_header, params=params)
+
+        if response.status_code != 200:
+            raise Exception("Error (get_tracks_by_author_name) : " + str(response.status_code) + " " + response.text)
+
+        response = response.json()
+        for track in response['tracks']['items']:
+            print(track['artists'][0]['id'], author_id)
+            if track['artists'][0]['id'] != author_id:
+                print("Not the same author!!!!!")
+                continue
+            tracks.append(track)
+        x += 50
+        # NOT: düşük bir olasıkıla son page'de 50 sonuç varsa sorun çıkabilir
+        if len(response['tracks']['items']) < 50:
+            break
+        if len(response['tracks']['items']) == 0:
+            break
+    return tracks
 
 import numpy as np
 def write_to_csv(
@@ -399,6 +445,7 @@ with open("tracks.csv", mode="r", newline="") as f:
 
 import re
 def download_preview_from_csv(filename_csv, output_dir):
+    os.makedirs(output_dir, exist_ok=True)
     with open(filename_csv, mode="r", newline="", encoding='utf-8') as f:
         okuyucu = csv.DictReader(f)
 
@@ -409,21 +456,26 @@ def download_preview_from_csv(filename_csv, output_dir):
             url = row['preview_url']
             name = re.sub(r'[\\/*?:"<>|]', '', row['track_name'])
             name = f"{output_dir}/{name}-({row['track_id']}).mp3".replace(" ", "_")
-            # Check if file exists
-            try:
-                with open(name, "r"):
-                    print("File exists" + name)
-                    continue
-            except:
-                pass
-            print(row['artist_name'], row['track_name'], row['track_id'], row['popularity'], row['genres'], row['preview_url'], sep="\n-> ")
-            print(url)
-            print(name)
+
+            # print(row['artist_name'], row['track_name'], row['track_id'], row['popularity'], row['genres'], row['preview_url'], sep="\n-> ")
+            # print(url)
+            # print(name)
+            print(f"Downlaoding {name} from {row['artist_name']}...")
             download_preview(url, name)
 
+# tracks = spotify_find_tracks_by_genre("us_pop", "US")
 
-tracks = spotify_find_tracks_by_genre("us_pop", "US")
+# save_tracks_to_cvs("us_pop.csv", tracks)
 
-save_tracks_to_cvs("us_pop.csv", tracks)
+# download_preview_from_csv("us_pop.csv", "us_pop")
 
-download_preview_from_csv("us_pop.csv", "us_pop")
+# tracks = get_top_tracks_by_author_name("ceza")
+
+# save_tracks_to_cvs("ceza.csv", tracks)
+
+# şimdilik en iyi fonksiyon bu.
+tracks = get_tracks_by_author_name("ceza", 70)
+
+save_tracks_to_cvs("ceza.csv", tracks)
+
+download_preview_from_csv("ceza.csv", "ceza")

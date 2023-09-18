@@ -3,6 +3,7 @@ import requests
 import time
 import os
 
+
 def create_fake_db(client_id, client_secret, callback_url, access_token, token_type, expires_in, refresh_token, scope):
     # Get the timestamp
     timestamp = int(time.time())
@@ -21,7 +22,7 @@ def create_fake_db(client_id, client_secret, callback_url, access_token, token_t
 
 def get_access_token():
     fields = ["client_id", "client_secret", "callback_url", "access_token", "token_type", "expires_in", "refresh_token", "scope", "timestamp"]
-    with open("fake_db.txt", "r", newline="") as f:
+    with open("fake_db.txt", "r+", newline="") as f:
         okuyucu = csv.DictReader(f)
         for row in okuyucu:
             # Check if token is expired
@@ -32,8 +33,10 @@ def get_access_token():
                 row['expires_in'] = expires_in
                 row['timestamp'] = int(time.time())
                 yazici = csv.DictWriter(f, fieldnames=fields)
+                f.seek(0)
+                f.truncate()
+                yazici.writeheader()
                 yazici.writerow(row)
-        
             return row['access_token']
 
 # Get metadata from spotify
@@ -224,6 +227,38 @@ def downlaod_from_yt(yt_video_id):
     # subprocess.Popen(["./win-x64/DownloadYouTube.exe", "-l", yt_video_id])
 
     return title
+
+def get_tracks_from_playlist(playlist_id):
+    url = "https://api.spotify.com/v1/playlists/" + playlist_id + "/tracks"
+    auth_header = {"Authorization": "Bearer " + get_access_token()}
+    response = requests.get(url, headers=auth_header)
+
+    if response.status_code != 200:
+        raise Exception("Error (get_tracks_from_playlist) : " + str(response.status_code) + " " + response.text)
+    
+    tracks = []
+    response = response.json()
+    track_count = response['total']
+    x = 100
+    for track in response['items']:
+        if track['is_local']:
+            continue
+        tracks.append(track['track'])
+    while x < track_count:
+        params = {
+            "offset": x
+        }
+        response = requests.get(url, headers=auth_header, params=params)
+        if response.status_code != 200:
+            raise Exception("Error (get_tracks_from_playlist) : " + str(response.status_code) + " " + response.text)
+        response = response.json()
+        for track in response['items']:
+            if track['is_local']:
+                continue
+            tracks.append(track['track'])
+        x += 100
+
+    return tracks
 
 def get_author_id_by_name(artist_name):
     # Get author id from spotify by name
@@ -479,3 +514,7 @@ tracks = get_tracks_by_author_name("ceza", 70)
 save_tracks_to_cvs("ceza.csv", tracks)
 
 download_preview_from_csv("ceza.csv", "ceza")
+
+tracks = get_tracks_from_playlist("0f1H6LMucBQifwSLNU9tFP")
+
+save_tracks_to_cvs("local.csv", tracks)

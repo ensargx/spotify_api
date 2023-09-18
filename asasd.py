@@ -1,6 +1,7 @@
 import base64
 import requests
 import time
+import os
 
 def create_fake_db(client_id, client_secret, callback_url, access_token, token_type, expires_in, refresh_token, scope):
     # Get the timestamp
@@ -11,28 +12,29 @@ def create_fake_db(client_id, client_secret, callback_url, access_token, token_t
 
     fields = ["client_id", "client_secret", "callback_url", "access_token", "token_type", "expires_in", "refresh_token", "scope", "timestamp"]
     # Create fake_db.txt file 
-    yazici = csv.DictWriter(f, fieldnames=fields)
-    with open("fake_db.txt", "w") as f:
+    with open("fake_db.txt", "w", newline="") as f:
+        yazici = csv.DictWriter(f, fieldnames=fields)
         liste = [client_id, client_secret, callback_url, access_token, token_type, expires_in, refresh_token, scope, timestamp]
+        yazici.writeheader()
         veri_dict = dict(zip(fields, liste))
         yazici.writerow(veri_dict)
 
-def get_access_token_from_fake_db():
+def get_access_token():
     fields = ["client_id", "client_secret", "callback_url", "access_token", "token_type", "expires_in", "refresh_token", "scope", "timestamp"]
-    with open("fake_db.txt", "r") as f:
+    with open("fake_db.txt", "r", newline="") as f:
         okuyucu = csv.DictReader(f)
-        row = okuyucu[0]
-        if row['timestamp'] + row['expires_in'] < int(time.time()):
-            # Refresh token
-            access_token, expires_in = refresh_access_token(row['client_id'], row['client_secret'], row['refresh_token'])
-            row['access_token'] = access_token
-            row['expires_in'] = expires_in
-            row['timestamp'] = int(time.time())
-            yazici = csv.DictWriter(f, fieldnames=fields)
-            yazici.writerow(row)
-    
-        return row['access_token']
-    
+        for row in okuyucu:
+            # Check if token is expired
+            if int(time.time()) - int(row['timestamp']) > int(row['expires_in']):
+                # Refresh token
+                access_token, expires_in = refresh_access_token(row['client_id'], row['client_secret'], row['refresh_token'])
+                row['access_token'] = access_token
+                row['expires_in'] = expires_in
+                row['timestamp'] = int(time.time())
+                yazici = csv.DictWriter(f, fieldnames=fields)
+                yazici.writerow(row)
+        
+            return row['access_token']
 
 # Get metadata from spotify
 def get_metadata_spotify(spotify_id):
@@ -64,7 +66,6 @@ def get_artist_data_spotify(spotify_id):
         return 0
     
     return response.json()
-
 
 def get_spotify_data_from_yt_video_title(yt_video_title):
     url = "https://api.spotify.com/v1/search"
@@ -149,13 +150,8 @@ def refresh_access_token(client_id, client_secret, refresh_token):
     expires_in = response['expires_in']
     return token, expires_in        
 
-def create_auth_url():
-    url = "https://accounts.spotify.com/authorize"
-    url += "?client_id=" + SPOTIFY_CLIENT_ID
-    url += "&response_type=code"
-    url += "&redirect_uri=" + SPOTIFY_API_CALLBACK_URL
-    url += "&scope=user-read-email"
-    return url
+import requests
+import urllib3
 
 class Req:
     def __init__(self):
@@ -354,6 +350,8 @@ def get_data_by_name(name):
 
 def download_preview(preview_url, out_name):
     r = requests.get(preview_url, allow_redirects=True)
+    # Create folder and file if not exists
+    os.makedirs(os.path.dirname(out_name), exist_ok=True)
     with open(out_name, "wb") as f:
         f.write(r.content)
 
@@ -424,16 +422,8 @@ def download_preview_from_csv(filename_csv, output_dir):
             download_preview(url, name)
 
 
-"""
 tracks = spotify_find_tracks_by_genre("us_pop", "US")
 
 save_tracks_to_cvs("us_pop.csv", tracks)
 
 download_preview_from_csv("us_pop.csv", "us_pop")
-"""
-
-author_id = get_author_id_by_name("sezen aksu")
-
-tracks = get_tracks_by_author_id("Sezen Aksu")
-
-save_tracks_to_cvs("sezen_aksu.csv", tracks)
